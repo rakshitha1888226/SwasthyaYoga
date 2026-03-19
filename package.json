@@ -22,8 +22,8 @@
   "react-native-vision-camera": "^3.9.0",
   "react-native-vision-camera-mlkit": "^0.5.0",
   "@react-native-voice/voice": "^3.2.4"
-}
-  },
+},
+
   "devDependencies": {
     "@react-native/metro-config": "^0.84.1",
     "@types/react": "^19.2.14",
