@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "538955948011",
+    "project_id": "swasthyayoga-ddc05",
+    "storage_bucket": "swasthyayoga-ddc05.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:538955948011:android:317cb4dad291a67f6a03ae",
+        "android_client_info": {
+          "package_name": "com.swasthyayoga"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "538955948011-pvtu5qttvntt2d2elhlebdmj1eflnf0h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.swasthyayoga",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "538955948011-cna0rpefcp2u3c0sup45u6mkkomgv7ab.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCeb1OaNSw_Xb_EpSwkkSKjKaGfhyZKjks"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "538955948011-cna0rpefcp2u3c0sup45u6mkkomgv7ab.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
