@@ -1,256 +1,251 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, Alert, ActivityIndicator,
+  Animated, Dimensions, StatusBar,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
+const { width, height } = Dimensions.get('window');
+
+// ── Background yoga poses cycling as visual ───────────────────────────────
+const BG_ITEMS = [
+  { emoji: '🧘‍♀️', pose: 'Padmasana', te: 'పద్మాసన', color: '#1B5E20' },
+  { emoji: '🌅', pose: 'Surya Namaskar', te: 'సూర్య నమస్కారం', color: '#1A237E' },
+  { emoji: '🧘', pose: 'Tadasana', te: 'తాడాసన', color: '#4A148C' },
+  { emoji: '🌿', pose: 'Vrikshasana', te: 'వృక్షాసన', color: '#1B5E20' },
+  { emoji: '☀️', pose: 'Bhujangasana', te: 'భుజంగాసన', color: '#E65100' },
+];
+
 const WelcomeScreen = ({ navigation }) => {
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [phone,    setPhone]    = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [bgIndex,  setBgIndex]  = useState(0);
+  const fadeAnim               = useRef(new Animated.Value(1)).current;
+  const slideAnim              = useRef(new Animated.Value(0)).current;
 
- useEffect(() => {
-  // Configure Google Sign-In
-  GoogleSignin.configure({
-    webClientId: '538955948011-cna0rpefcp2u3c0sup45u6mkkomgv7ab.apps.googleusercontent.com', // 0 (zero) not O
-    offlineAccess: false,
-    scopes: ['profile', 'email'],
-  });
-}, []);
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: '538955948011-cna0rpefcp2u3c0sup45u6mkkomgv7ab.apps.googleusercontent.com',
+      offlineAccess: false,
+      scopes: ['profile', 'email'],
+    });
 
-  const handlePhoneLogin = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) {
-      Alert.alert('Error', 'Please enter a valid phone number');
-      return;
-    }
+    // Animate in
+    Animated.timing(slideAnim, {
+      toValue: 1, duration: 800, useNativeDriver: true,
+    }).start();
 
-    setLoading(true);
+    // Cycle background every 4 seconds
+    const interval = setInterval(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0, duration: 500, useNativeDriver: true,
+      }).start(() => {
+        setBgIndex(i => (i + 1) % BG_ITEMS.length);
+        Animated.timing(fadeAnim, {
+          toValue: 1, duration: 500, useNativeDriver: true,
+        }).start();
+      });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const current = BG_ITEMS[bgIndex];
+
+  const handleGoogleLogin = async () => {
     try {
-      const formattedNumber = '+91' + phoneNumber;
-      Alert.alert('Info', 'Phone authentication coming soon!');
+      setLoading(true);
+      await GoogleSignin.signOut();
+      await GoogleSignin.hasPlayServices();
+      await GoogleSignin.signIn();
+      const tokens = await GoogleSignin.getTokens();
+      if (!tokens?.idToken) throw new Error('No token received');
+      const credential = auth.GoogleAuthProvider.credential(tokens.idToken);
+      await auth().signInWithCredential(credential);
       setLoading(false);
     } catch (error) {
       setLoading(false);
-      Alert.alert('Error', error.message);
+      if (error.code !== 'SIGN_IN_CANCELLED') {
+        Alert.alert('Sign In Failed', error.message);
+      }
     }
   };
 
- const handleGoogleLogin = async () => {
-  try {
-    setLoading(true);
-    
-    // Force sign out first (clean slate)
-    await GoogleSignin.signOut();
-    
-    // Check Play Services
-    await GoogleSignin.hasPlayServices();
-    
-    // Sign in with Google
-    await GoogleSignin.signIn();
-    
-    // Get tokens
-    const tokens = await GoogleSignin.getTokens();
-    console.log('Tokens received:', !!tokens.idToken);
-    
-    if (!tokens || !tokens.idToken) {
-      throw new Error('Failed to get authentication token');
-    }
-    
-    // Create Firebase credential
-    const googleCredential = auth.GoogleAuthProvider.credential(tokens.idToken);
-    
-    // Sign in to Firebase
-    await auth().signInWithCredential(googleCredential);
-    
-    setLoading(false);
-    // Navigation automatic ga avtundi via App.js auth state
-    
-  } catch (error) {
-    setLoading(false);
-    console.error('Google Sign-In Error:', error);
-    
-    if (error.code === 'SIGN_IN_CANCELLED') {
-      // User cancelled - ignore
-      console.log('User cancelled sign in');
-    } else {
-      Alert.alert('Sign In Failed', error.message || 'Could not sign in with Google');
-    }
-  }
-};
-
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.appName}>స్వస్థ్య యోగా</Text>
-        <Text style={styles.tagline}>Find Balance. Find Peace.</Text>
+    <View style={[styles.root, { backgroundColor: current.color }]}>
+      <StatusBar barStyle="light-content" backgroundColor={current.color} />
+
+      {/* ── Animated background yoga visual ─────────────────────────────── */}
+      <Animated.View style={[styles.bgVisual, { opacity: fadeAnim }]}>
+        <Text style={styles.bgEmoji}>{current.emoji}</Text>
+        <Text style={styles.bgPose}>{current.pose}</Text>
+        <Text style={styles.bgPoseTe}>{current.te}</Text>
+      </Animated.View>
+
+      {/* ── App title ────────────────────────────────────────────────────── */}
+      <Animated.View style={[
+        styles.titleBlock,
+        {
+          opacity: slideAnim,
+          transform: [{
+            translateY: slideAnim.interpolate({
+              inputRange: [0, 1], outputRange: [40, 0],
+            }),
+          }],
+        },
+      ]}>
+        <Text style={styles.appName}>స్వాస్థ్య యోగా</Text>
+        <Text style={styles.appNameEn}>Swasthya Yoga</Text>
+        <Text style={styles.tagline}>AI-powered yoga in Telugu 🙏</Text>
+      </Animated.View>
+
+      {/* ── Login card ───────────────────────────────────────────────────── */}
+      <View style={styles.card}>
+
+        {/* Phone input */}
+        <Text style={styles.cardLabel}>Phone Number</Text>
+        <View style={styles.phoneRow}>
+          <View style={styles.countryCode}>
+            <Text style={styles.countryCodeText}>🇮🇳 +91</Text>
+          </View>
+          <TextInput
+            style={styles.phoneInput}
+            placeholder="Enter mobile number"
+            placeholderTextColor="#aaa"
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+            maxLength={10}
+            editable={!loading}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.otpBtn, loading && { opacity: 0.6 }]}
+          onPress={() => Alert.alert('Coming soon', 'OTP login will be added soon!')}
+          disabled={loading}
+        >
+          <Text style={styles.otpBtnText}>Send OTP</Text>
+        </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Google sign in */}
+        <TouchableOpacity
+          style={[styles.googleBtn, loading && { opacity: 0.6 }]}
+          onPress={handleGoogleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#2E7D32" size="small" />
+          ) : (
+            <>
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <Text style={styles.terms}>
+          By continuing you agree to our{' '}
+          <Text style={styles.termsLink}>Terms</Text> &{' '}
+          <Text style={styles.termsLink}>Privacy Policy</Text>
+        </Text>
       </View>
-
-      <View style={styles.quoteContainer}>
-        <Text style={styles.quote}>"Health is wealth"</Text>
-      </View>
-
-      <View style={styles.inputContainer}>
-        <Text style={styles.countryCode}>+91</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="9876543210"
-          keyboardType="phone-pad"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
-          maxLength={10}
-          editable={!loading}
-        />
-      </View>
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handlePhoneLogin}
-        disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Send OTP</Text>
-        )}
-      </TouchableOpacity>
-
-      <View style={styles.dividerContainer}>
-        <View style={styles.divider} />
-        <Text style={styles.dividerText}>OR</Text>
-        <View style={styles.divider} />
-      </View>
-
-      <TouchableOpacity
-        style={styles.googleButton}
-        onPress={handleGoogleLogin}
-        disabled={loading}>
-        <Text style={styles.googleButtonText}>Continue with Google</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.termsText}>
-        By continuing, you agree to our{' '}
-        <Text style={styles.link}>Terms</Text> and{' '}
-        <Text style={styles.link}>Privacy Policy</Text>
-      </Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    marginBottom: 30,
-  },
-  appName: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  tagline: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  quoteContainer: {
-    backgroundColor: '#e8f5e8',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 30,
-  },
-  quote: {
-    fontSize: 14,
-    color: '#2E7D32',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  inputContainer: {
-    flexDirection: 'row',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-    borderRadius: 12,
-    marginBottom: 16,
+  },
+
+  // ── Background visual ─────────────────────────────────────────────────────
+  bgVisual: {
+    position: 'absolute',
+    top: height * 0.08,
+    alignItems: 'center',
+    width: '100%',
+  },
+  bgEmoji:  { fontSize: 100, marginBottom: 16 },
+  bgPose:   { color: 'rgba(255,255,255,0.9)', fontSize: 22, fontWeight: 'bold' },
+  bgPoseTe: { color: 'rgba(255,255,255,0.65)', fontSize: 16, marginTop: 4 },
+
+  // ── App title ─────────────────────────────────────────────────────────────
+  titleBlock: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  appName:   { color: '#fff', fontSize: 32, fontWeight: 'bold', textAlign: 'center' },
+  appNameEn: { color: 'rgba(255,255,255,0.75)', fontSize: 16, textAlign: 'center', marginTop: 2 },
+  tagline:   { color: 'rgba(255,255,255,0.65)', fontSize: 13, textAlign: 'center', marginTop: 6 },
+
+  // ── Login card ────────────────────────────────────────────────────────────
+  card: {
+    width: '100%',
     backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 28,
+    paddingBottom: 40,
+    elevation: 20,
+  },
+  cardLabel: { fontSize: 13, color: '#666', marginBottom: 8, fontWeight: '500' },
+
+  phoneRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#E0E0E0',
+    borderRadius: 12, marginBottom: 14, overflow: 'hidden',
   },
   countryCode: {
-    paddingHorizontal: 15,
-    fontSize: 16,
-    color: '#2E7D32',
-    borderRightWidth: 1,
-    borderRightColor: '#4CAF50',
-    paddingVertical: 15,
+    paddingHorizontal: 14, paddingVertical: 14,
+    backgroundColor: '#F5F5F5',
+    borderRightWidth: 1, borderRightColor: '#E0E0E0',
   },
-  input: {
-    flex: 1,
-    padding: 15,
-    fontSize: 16,
-    color: '#333',
+  countryCodeText: { fontSize: 15, color: '#333' },
+  phoneInput: {
+    flex: 1, paddingHorizontal: 14,
+    fontSize: 16, color: '#222', height: 50,
   },
-  button: {
-    backgroundColor: '#4CAF50',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 20,
+
+  otpBtn: {
+    backgroundColor: '#2E7D32', borderRadius: 12,
+    padding: 15, alignItems: 'center', marginBottom: 20,
   },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
+  otpBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+
   divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#4CAF50',
+    flexDirection: 'row', alignItems: 'center',
+    marginBottom: 20, gap: 10,
   },
-  dividerText: {
-    paddingHorizontal: 10,
-    color: '#2E7D32',
-    fontWeight: '600',
-  },
-  googleButton: {
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E0E0E0' },
+  dividerText: { color: '#999', fontSize: 13, fontWeight: '600' },
+
+  googleBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#E0E0E0',
+    borderRadius: 12, padding: 14, gap: 12, marginBottom: 18,
     backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-    marginBottom: 20,
   },
-  googleButtonText: {
-    color: '#2E7D32',
-    fontSize: 16,
-    fontWeight: '600',
+  googleIcon: {
+    fontSize: 18, fontWeight: 'bold', color: '#4285F4',
+    width: 24, textAlign: 'center',
   },
-  termsText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-  },
-  link: {
-    color: '#4CAF50',
-    textDecorationLine: 'underline',
-  },
+  googleBtnText: { fontSize: 15, color: '#333', fontWeight: '600' },
+
+  terms:     { fontSize: 11, color: '#aaa', textAlign: 'center', lineHeight: 18 },
+  termsLink: { color: '#4CAF50', textDecorationLine: 'underline' },
 });
 
 export default WelcomeScreen;
