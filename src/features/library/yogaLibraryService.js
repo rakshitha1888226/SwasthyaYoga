@@ -1,7 +1,7 @@
 // ── Yoga Library AI Service ───────────────────────────────────────────────────
 // Uses same Gemini key as healthAIService
 
-const GEMINI_API_KEY = 'AIzaSyCr27XUYNWOZuQvFhmlOgIYwUiyeybmAYU'; // same key as healthAIService.js
+const GEMINI_API_KEY = 'AIzaSyAMJmccWzVPk1q-XPIF165blH-h4tZ_Ri0'; // same key as healthAIService.js
 
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
@@ -72,7 +72,7 @@ Rules:
 - Return ONLY the JSON, nothing before { and nothing after }`;
 
 // ── Main fetch function ───────────────────────────────────────────────────────
-export async function fetchYogaCategory(categoryName, categoryType) {
+export async function fetchYogaCategory(categoryName, categoryType, retryCount = 0) {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_KEY_HERE') {
     return { success: false, error: 'Gemini API key missing in yogaLibraryService.js' };
   }
@@ -87,6 +87,11 @@ export async function fetchYogaCategory(categoryName, categoryType) {
       }),
     });
 
+    // 503 = Gemini busy — retry up to 3 times
+    if (response.status === 503 && retryCount < 3) {
+      await new Promise(res => setTimeout(res, (retryCount + 1) * 2000));
+      return fetchYogaCategory(categoryName, categoryType, retryCount + 1);
+    }
     if (!response.ok) {
       const err = await response.text();
       throw new Error(`Gemini ${response.status}: ${err}`);

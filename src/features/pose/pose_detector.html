@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; width: 100vw; height: 100vh; font-family: sans-serif; }
+
+    #video  { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+    #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+    #poseLabel {
+      position: absolute; top: 12px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.75);
+      color: #FFD700; font-size: 15px; font-weight: bold;
+      padding: 6px 20px; border-radius: 20px; z-index: 30;
+      white-space: nowrap; max-width: 90vw;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+
+    #status {
+      position: absolute; top: 50px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.65);
+      color: #4CAF50; font-size: 12px;
+      padding: 5px 16px; border-radius: 16px; z-index: 30;
+      white-space: nowrap;
+    }
+    #status.warn  { color: #FFC107; }
+    #status.error { color: #F44336; }
+
+    #scoreBar {
+      position: absolute; bottom: 90px; left: 16px; right: 16px;
+      z-index: 30; display: none;
+    }
+    #scoreBar.show { display: block; }
+    #scoreTrack {
+      height: 8px; background: rgba(255,255,255,0.2);
+      border-radius: 4px; overflow: hidden;
+    }
+    #scoreFill { height: 100%; border-radius: 4px; background: #4CAF50; transition: width 0.4s; }
+    #scoreText { color: #fff; font-size: 13px; font-weight: bold; margin-bottom: 4px; }
+
+    #captureBtn {
+      position: absolute; bottom: 20px; left: 16px; right: 16px;
+      padding: 16px; font-size: 17px; font-weight: bold;
+      background: #2E7D32; color: #fff;
+      border: none; border-radius: 30px; cursor: pointer; z-index: 30;
+    }
+    #captureBtn:disabled { background: #444; color: #777; }
+
+    #instruction {
+      position: absolute; bottom: 80px; left: 0; right: 0;
+      text-align: center; z-index: 30;
+      color: rgba(255,255,255,0.85); font-size: 13px;
+      padding: 0 20px;
+      display: none;
+    }
+    #instruction.show { display: block; }
+  </style>
+</head>
+<body>
+
+<div id="poseLabel">🧘 Loading...</div>
+<div id="status">Starting camera...</div>
+<div id="scoreBar">
+  <div id="scoreText">Score: 0</div>
+  <div id="scoreTrack"><div id="scoreFill" style="width:0%"></div></div>
+</div>
+<div id="instruction"></div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<button id="captureBtn" disabled onclick="capturePose()">📸 Tap to Capture</button>
+
+<script>
+const video      = document.getElementById('video');
+const canvas     = document.getElementById('canvas');
+const ctx        = canvas.getContext('2d');
+const poseLabel  = document.getElementById('poseLabel');
+const statusEl   = document.getElementById('status');
+const captureBtn = document.getElementById('captureBtn');
+const scoreBar   = document.getElementById('scoreBar');
+const scoreFill  = document.getElementById('scoreFill');
+const scoreText  = document.getElementById('scoreText');
+const instrEl    = document.getElementById('instruction');
+
+let lastPose     = null;
+let capturing    = false;
+let currentPose  = null; // set by RN message
+let liveScore    = 0;
+
+// ── Resize ────────────────────────────────────────────────────────────────────
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function setStatus(msg, type) {
+  statusEl.textContent = msg;
+  statusEl.className   = type || '';
+}
+
+function sendToRN(data) {
+  try { window.ReactNativeWebView.postMessage(JSON.stringify(data)); }
+  catch(e) { console.log('RN msg:', JSON.stringify(data)); }
+}
+
+// ── Angle between 3 points ────────────────────────────────────────────────────
+function angle(a, b, c) {
+  const ab = { x: a.x - b.x, y: a.y - b.y };
+  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ab.x * cb.x + ab.y * cb.y;
+  const mag = Math.sqrt(ab.x*ab.x + ab.y*ab.y) * Math.sqrt(cb.x*cb.x + cb.y*cb.y);
+  if (mag === 0) return 0;
+  return Math.round(Math.acos(Math.min(1, Math.max(-1, dot/mag))) * 180 / Math.PI);
+}
+
+// ── Pose-specific scoring ─────────────────────────────────────────────────────
+function scorePose(lm, poseId) {
+  if (!lm || lm.length < 29) return { score: 0, tips: ['Stand fully in frame'], grade: 'F' };
+
+  const L = lm;
+  let score = 100;
+  const tips = [];
+
+  // Common landmarks
+  const lSh = L[11], rSh = L[12];
+  const lEl = L[13], rEl = L[14];
+  const lWr = L[15], rWr = L[16];
+  const lHip = L[23], rHip = L[24];
+  const lKn = L[25], rKn = L[26];
+  const lAn = L[27], rAn = L[28];
+  const nose = L[0];
+
+  // Shoulder tilt (always check)
+  const shoulderTilt = Math.abs(lSh.y - rSh.y);
+  if (shoulderTilt > 0.06) { score -= 10; tips.push('Keep shoulders level'); }
+
+  // Pose-specific checks
+  if (!poseId || poseId === 'tadasana' || poseId === 'sn_1' || poseId === 'sn_12') {
+    // Mountain / Prayer — stand straight
+    const spineOffset = Math.abs(nose.x - (lHip.x + rHip.x) / 2);
+    if (spineOffset > 0.08) { score -= 15; tips.push('Center your spine — stand straight'); }
+    const hipTilt = Math.abs(lHip.y - rHip.y);
+    if (hipTilt > 0.05) { score -= 10; tips.push('Level your hips'); }
+    if (tips.length === 0) tips.push('Great posture! Keep breathing');
+
+  } else if (poseId === 'bhujangasana' || poseId === 'sn_7' || poseId === 'bb_1') {
+    // Cobra — chest lifted
+    const spineOffset = Math.abs(nose.x - (lHip.x + rHip.x) / 2);
+    if (nose.y > lSh.y) { score -= 25; tips.push('Lift your chest and head higher'); }
+    if (lSh.y > lHip.y + 0.05) { score -= 15; tips.push('Press palms down, lift more'); }
+    if (tips.length === 0) tips.push('Good cobra! Open your chest more');
+
+  } else if (poseId === 'vrikshasana' || poseId === 'bal_1') {
+    // Tree — balance
+    const kneeAngleL = angle(lHip, lKn, lAn);
+    if (kneeAngleL < 140) { score -= 10; tips.push('Straighten your standing leg'); }
+    const armSpread = Math.abs(lWr.x - rWr.x);
+    if (armSpread < 0.15) { score -= 15; tips.push('Raise both arms overhead'); }
+    if (tips.length === 0) tips.push('Excellent balance!');
+
+  } else if (poseId === 'balasana' || poseId === 'bb_4' || poseId === 'rel_3') {
+    // Child / Corpse — relaxed, low
+    if (nose.y < 0.6) { score -= 20; tips.push('Lower your head to the ground'); }
+    if (tips.length === 0) tips.push('Good! Breathe deeply and relax');
+
+  } else if (poseId === 'sn_3' || poseId === 'sn_10' || poseId === 'uttanasana') {
+    // Forward fold — bend forward
+    if (nose.y < lHip.y) { score -= 25; tips.push('Bend further forward, bring head down'); }
+    if (tips.length === 0) tips.push('Good fold! Relax your neck');
+
+  } else if (poseId === 'sn_5') {
+    // Plank — straight body
+    const bodyLine = Math.abs(nose.y - lAn.y);
+    if (bodyLine > 0.3) { score -= 20; tips.push('Keep body in a straight line'); }
+    if (tips.length === 0) tips.push('Strong plank! Keep core tight');
+
+  } else if (poseId === 'sn_8' || poseId === 'adho_mukha') {
+    // Downward dog — hips high
+    const midHip = (lHip.y + rHip.y) / 2;
+    const midSh  = (lSh.y + rSh.y) / 2;
+    if (midHip > midSh) { score -= 25; tips.push('Lift hips higher — form an inverted V'); }
+    if (nose.y < midSh) { score -= 10; tips.push('Let head drop between arms'); }
+    if (tips.length === 0) tips.push('Good downward dog!');
+
+  } else if (poseId === 'dhanurasana' || poseId === 'bb_3') {
+    // Bow — chest and legs lifted
+    if (nose.y > lSh.y) { score -= 20; tips.push('Lift chest higher'); }
+    if (tips.length === 0) tips.push('Good bow pose! Pull ankles back more');
+
+  } else if (poseId === 'setu_bandha' || poseId === 'bb_2') {
+    // Bridge — hips up
+    const midHip = (lHip.y + rHip.y) / 2;
+    const midSh  = (lSh.y + rSh.y) / 2;
+    if (midHip > midSh - 0.05) { score -= 25; tips.push('Lift hips higher off the ground'); }
+    if (tips.length === 0) tips.push('Great bridge! Press feet firmly down');
+
+  } else if (poseId === 'w_1' || poseId === 'virabhadrasana1') {
+    // Warrior I — front knee bent, arms up
+    const armAngleL = angle(lHip, lSh, lWr);
+    if (armAngleL < 150) { score -= 15; tips.push('Raise arms fully overhead'); }
+    if (tips.length === 0) tips.push('Strong Warrior I!');
+
+  } else if (poseId === 'w_2') {
+    // Warrior II — arms parallel
+    const armSpread = Math.abs(lWr.x - rWr.x);
+    if (armSpread < 0.5) { score -= 20; tips.push('Extend arms further apart, parallel to floor'); }
+    if (tips.length === 0) tips.push('Great Warrior II! Keep front knee bent');
+
+  } else if (poseId === 'garudasana' || poseId === 'bal_2') {
+    // Eagle — arms wrapped
+    const armSpread = Math.abs(lWr.x - rWr.x);
+    if (armSpread > 0.3) { score -= 20; tips.push('Wrap arms tighter together'); }
+    if (tips.length === 0) tips.push('Good eagle! Sink deeper');
+
+  } else if (poseId === 'baddha_konasana' || poseId === 'rel_2') {
+    // Butterfly — feet together
+    if (nose.y < 0.3) { score -= 10; tips.push('Sit up tall with spine straight'); }
+    if (tips.length === 0) tips.push('Good butterfly! Let knees drop lower');
+
+  } else if (poseId === 'rel_1' || poseId === 'viparita_karani') {
+    // Legs up wall — legs raised
+    const legHeight = Math.min(lAn.y, rAn.y);
+    if (legHeight > 0.4) { score -= 20; tips.push('Raise legs higher up the wall'); }
+    if (tips.length === 0) tips.push('Good! Keep legs relaxed against the wall');
+
+  } else {
+    // Generic scoring
+    const hipTilt = Math.abs(lHip.y - rHip.y);
+    if (hipTilt > 0.06) { score -= 10; tips.push('Keep hips level'); }
+    if (tips.length === 0) tips.push('Looking good! Hold the pose steadily');
+  }
+
+  score = Math.max(0, Math.min(100, score));
+  const grade =
+    score >= 85 ? 'A' :
+    score >= 70 ? 'B' :
+    score >= 55 ? 'C' :
+    score >= 40 ? 'D' : 'F';
+
+  return { score, tips, grade };
+}
+
+// ── MediaPipe setup ───────────────────────────────────────────────────────────
+const poseDetector = new Pose({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}`
+});
+poseDetector.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.55,
+  minTrackingConfidence: 0.55,
+});
+
+poseDetector.onResults(results => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+  if (results.poseLandmarks) {
+    // Draw skeleton
+    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+      color: '#00E676', lineWidth: 4
+    });
+    drawLandmarks(ctx, results.poseLandmarks, {
+      color: '#FFEB3B', fillColor: '#FF6F00', lineWidth: 2, radius: 6
+    });
+
+    lastPose = results.poseLandmarks;
+    captureBtn.disabled = false;
+
+    // Live score
+    const result = scorePose(lastPose, currentPose?.id);
+    liveScore = result.score;
+
+    const color = liveScore >= 70 ? '#4CAF50' : liveScore >= 50 ? '#FFC107' : '#F44336';
+    scoreText.textContent = `Live Score: ${liveScore}/100`;
+    scoreFill.style.width = liveScore + '%';
+    scoreFill.style.background = color;
+    scoreBar.className = 'show';
+
+    setStatus('✅ Pose detected — tap capture!', '');
+  } else {
+    lastPose = null;
+    captureBtn.disabled = true;
+    scoreBar.className = '';
+    setStatus('👤 Stand fully in frame...', 'warn');
+  }
+});
+
+// ── Camera start ──────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    setStatus('Loading pose model...', '');
+    const camera = new Camera(video, {
+      onFrame: async () => { await poseDetector.send({ image: video }); },
+      width: 640, height: 480,
+    });
+    await camera.start();
+    sendToRN({ type: 'ready' });
+  } catch(err) {
+    setStatus('Camera error: ' + err.message, 'error');
+    sendToRN({ type: 'error', message: err.message });
+  }
+}
+startCamera();
+
+// ── Capture & score ───────────────────────────────────────────────────────────
+function capturePose() {
+  if (!lastPose || capturing) return;
+  capturing = true;
+  captureBtn.disabled = true;
+  captureBtn.textContent = '⏳ Analyzing...';
+  setStatus('Capturing...', '');
+
+  setTimeout(() => {
+    try {
+      // Capture canvas as image
+      const small = document.createElement('canvas');
+      small.width  = 480;
+      small.height = 360;
+      small.getContext('2d').drawImage(canvas, 0, 0, 480, 360);
+      const imageData = small.toDataURL('image/jpeg', 0.7);
+
+      // Score the pose
+      const feedback = scorePose(lastPose, currentPose?.id);
+
+      sendToRN({
+        type:      'poseResult',
+        score:     feedback.score,
+        feedback:  feedback,
+        imageData: imageData,
+        landmarks: lastPose,
+      });
+
+      setStatus('✅ Done! See your results', '');
+    } catch(e) {
+      setStatus('Error: ' + e.message, 'error');
+      sendToRN({ type: 'error', message: e.message });
+    }
+
+    setTimeout(() => {
+      capturing = false;
+      captureBtn.disabled    = false;
+      captureBtn.textContent = '📸 Tap to Capture';
+    }, 2000);
+  }, 200);
+}
+
+// ── Handle messages from React Native ────────────────────────────────────────
+function handleRNMessage(raw) {
+  try {
+    const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+    if (msg.type === 'setPose') {
+      currentPose = msg.pose;
+      poseLabel.textContent = currentPose
+        ? `${currentPose.step ? currentPose.step + '. ' : ''}${currentPose.name || '🧘'}`
+        : '🧘 Ready';
+
+      if (currentPose?.instruction) {
+        instrEl.textContent = currentPose.instruction;
+        instrEl.className = 'show';
+      } else {
+        instrEl.className = '';
+      }
+      setStatus('Get into position...', '');
+    }
+
+    if (msg.type === 'capture') {
+      capturePose();
+    }
+  } catch(e) {}
+}
+
+document.addEventListener('message', e => handleRNMessage(e.data));
+window.addEventListener('message',   e => handleRNMessage(e.data));
+</script>
+</body>
+</html>

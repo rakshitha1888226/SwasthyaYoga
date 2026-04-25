@@ -2,7 +2,7 @@
 import { Platform } from 'react-native';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBtr_JXXaVg2mYepVhhingOMCSxOoRpbqs",
+  apiKey: "AIzaSyBtrJXXaVg2mYepVhhingOMCSxOoRpbqs",
   authDomain: "swasthyagoa-ddc05.firebaseapp.com",
   projectId: "swasthyagoa-ddc05",
   storageBucket: "swasthyagoa-ddc05.firebasestorage.app",

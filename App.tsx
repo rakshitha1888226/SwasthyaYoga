@@ -14,22 +14,23 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety timeout — if Firebase hangs, force show the app
+    const timeout = setTimeout(() => {
+      console.log('Firebase auth timed out — forcing load');
+      setLoading(false);
+    }, 5000);
+
     const unsubscribe = auth().onAuthStateChanged((user: any) => {
+      clearTimeout(timeout);
       setUser(user);
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      clearTimeout(timeout);
+      unsubscribe();
+    };
   }, []);
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#2E7D32" />
-      </View>
-    );
-  }
-
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>

@@ -1,7 +1,7 @@
 // ── SwasthyaYoga — AI Health Service (Gemini 2.5 Flash — FREE) ───────────────
 // Get FREE key from: https://aistudio.google.com/app/apikey
 
-const GEMINI_API_KEY = 'AIzaSyAHHPiosVFM8bsp7uYq5wafKgQR_JuH4T8';
+const GEMINI_API_KEY = 'AIzaSyB9ZrY74Ovtvr-64wjgmyJuYDgwI47o8Ok';
 
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
@@ -44,7 +44,7 @@ const buildPrompt = (conditionQuery) => `Yoga therapist. For "${conditionQuery}"
 Fill for "${conditionQuery}". Rules: 5 asanas, 5 foodEat, 4 foodAvoid. Telugu/Hindi native script. No markdown. Return ONLY the JSON object starting with { and ending with }.`;
 
 // ── Main fetch ────────────────────────────────────────────────────────────────
-export async function fetchConditionData(conditionQuery) {
+export async function fetchConditionData(conditionQuery, retryCount = 0) {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_KEY_HERE') {
     return {
       success: false,
@@ -65,6 +65,11 @@ export async function fetchConditionData(conditionQuery) {
       }),
     });
 
+    // 503 = Gemini busy — retry up to 3 times with backoff
+    if (response.status === 503 && retryCount < 3) {
+      await new Promise(res => setTimeout(res, (retryCount + 1) * 2000));
+      return fetchConditionData(conditionQuery, retryCount + 1);
+    }
     if (!response.ok) {
       const errText = await response.text();
       throw new Error(`Gemini API ${response.status}: ${errText}`);
