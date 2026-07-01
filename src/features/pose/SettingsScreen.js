@@ -1,150 +1,115 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity,
+  SafeAreaView, StatusBar, Switch, ScrollView,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const LANGUAGES = [
-  { key: 'en',   label: 'English',       example: '"Warrior II — 72% correct. Bend your front knee more."' },
-  { key: 'te',   label: 'తెలుగు',         example: '"వీరభద్రాసన — 72% సరైనది. ముందు మోకాలును వంచండి."' },
-  { key: 'both', label: 'English + తెలుగు', example: '"Warrior II — 72% correct. ముందు మోకాలును వంచండి."' },
-];
 
 const SettingsScreen = ({ navigation }) => {
-  const [selected, setSelected] = useState('en');
-
-  useEffect(() => {
-    AsyncStorage.getItem('yogaLanguage').then(v => { if (v) setSelected(v); });
-  }, []);
-
-  const pick = async (key) => {
-    setSelected(key);
-    await AsyncStorage.setItem('yogaLanguage', key);
-  };
+  const [haptics,      setHaptics]      = React.useState(true);
+  const [sound,        setSound]        = React.useState(true);
+  const [darkMode,     setDarkMode]     = React.useState(true);
+  const [autoCapture,  setAutoCapture]  = React.useState(false);
 
   return (
-    <ScrollView style={styles.screen}>
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.back}>← Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backTxt}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Settings</Text>
-        <View style={{ width: 60 }} />
+        <Text style={styles.headerTitle}>Settings</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🗣️ Voice Feedback Language</Text>
-        <Text style={styles.sectionSub}>
-          The app will speak your pose score and corrections in this language
-        </Text>
+      <ScrollView contentContainerStyle={styles.content}>
 
-        {LANGUAGES.map(lang => (
-          <TouchableOpacity
-            key={lang.key}
-            style={[styles.option, selected === lang.key && styles.optionSelected]}
-            onPress={() => pick(lang.key)}
-          >
-            <View style={styles.optionLeft}>
-              <View style={[styles.radio, selected === lang.key && styles.radioSelected]}>
-                {selected === lang.key && <View style={styles.radioDot} />}
-              </View>
-              <View>
-                <Text style={[styles.optionLabel, selected === lang.key && styles.optionLabelSelected]}>
-                  {lang.label}
-                </Text>
-                <Text style={styles.optionExample}>{lang.example}</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
+        <Text style={styles.sectionTitle}>Pose Detection</Text>
+        <View style={styles.card}>
+          <SettingRow label="Auto-Capture Pose" value={autoCapture} onToggle={setAutoCapture}
+            description="Automatically capture when pose is held for 3 seconds" />
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🧘 Supported Poses</Text>
-        {[
-          ['Tadasana', 'తాడాసన', 'Stand straight, arms at sides'],
-          ['Urdhva Hastasana', 'ఊర్ధ్వ హస్తాసన', 'Stand straight, both arms raised'],
-          ['Warrior II', 'వీరభద్రాసన II', 'Wide legs, front knee bent, arms spread'],
-          ['Tree Pose', 'వృక్షాసన', 'One leg raised, arms above head'],
-          ['Chair Pose', 'ఉత్కటాసన', 'Knees bent, arms raised forward'],
-        ].map(([en, te, desc]) => (
-          <View key={en} style={styles.poseRow}>
-            <View>
-              <Text style={styles.poseName}>{en} — {te}</Text>
-              <Text style={styles.poseDesc}>{desc}</Text>
-            </View>
+        <Text style={styles.sectionTitle}>Feedback</Text>
+        <View style={styles.card}>
+          <SettingRow label="Haptic Feedback"   value={haptics}     onToggle={setHaptics}
+            description="Vibrate on pose detection" />
+          <View style={styles.divider} />
+          <SettingRow label="Sound Effects"     value={sound}       onToggle={setSound}
+            description="Play sounds on success" />
+        </View>
+
+        <Text style={styles.sectionTitle}>Appearance</Text>
+        <View style={styles.card}>
+          <SettingRow label="Dark Mode" value={darkMode} onToggle={setDarkMode}
+            description="Use dark theme throughout the app" />
+        </View>
+
+        <Text style={styles.sectionTitle}>About</Text>
+        <View style={styles.card}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>App Version</Text>
+            <Text style={styles.infoValue}>1.0.0</Text>
           </View>
-        ))}
-      </View>
+          <View style={styles.divider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>AI Model</Text>
+            <Text style={styles.infoValue}>SwasthyaYoga TFLite</Text>
+          </View>
+        </View>
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>How scoring works</Text>
-        <Text style={styles.infoText}>
-          The app measures your exact joint angles using MediaPipe — knee angle, hip angle,
-          shoulder angle etc. These are compared to ideal angles for each pose.
-          {'\n\n'}
-          Example: Warrior II needs your front knee at 90°. If your knee is at 145°,
-          the app says "Bend your front knee more — aim for 90°".
-          {'\n\n'}
-          No internet required. No AI. Works instantly. 100% accurate.
-        </Text>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
+const SettingRow = ({ label, description, value, onToggle }) => (
+  <View style={styles.settingRow}>
+    <View style={{ flex: 1 }}>
+      <Text style={styles.settingLabel}>{label}</Text>
+      {description && <Text style={styles.settingDesc}>{description}</Text>}
+    </View>
+    <Switch
+      value={value}
+      onValueChange={onToggle}
+      trackColor={{ false: '#333', true: '#2E7D32' }}
+      thumbColor={value ? '#4CAF50' : '#888'}
+    />
+  </View>
+);
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F5F7FB' },
-
-  header: {
+  root:    { flex: 1, backgroundColor: '#1a1a2e' },
+  header:  {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 14,
-    backgroundColor: '#2E7D32',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  back:  { color: '#fff', fontSize: 14 },
-  title: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  backBtn:     { width: 40, justifyContent: 'center' },
+  backTxt:     { color: '#fff', fontSize: 28, lineHeight: 28 },
+  headerTitle: { flex: 1, color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
 
-  section: { margin: 16, marginBottom: 0 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#2E7D32', marginBottom: 6 },
-  sectionSub:   { fontSize: 13, color: '#666', marginBottom: 14, lineHeight: 20 },
+  content:      { padding: 20, gap: 8 },
+  sectionTitle: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '600',
+                  textTransform: 'uppercase', letterSpacing: 1, marginTop: 12, marginBottom: 4 },
 
-  option: {
-    backgroundColor: '#fff', borderRadius: 12,
-    padding: 16, marginBottom: 10,
-    borderWidth: 2, borderColor: 'transparent',
-    elevation: 1,
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 16, overflow: 'hidden',
   },
-  optionSelected: { borderColor: '#4CAF50', backgroundColor: '#F1F8E9' },
-  optionLeft:     { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
-
-  radio: {
-    width: 22, height: 22, borderRadius: 11,
-    borderWidth: 2, borderColor: '#ccc',
-    justifyContent: 'center', alignItems: 'center',
-    marginTop: 2,
+  settingRow: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: 16, gap: 12,
   },
-  radioSelected: { borderColor: '#4CAF50' },
-  radioDot:      { width: 10, height: 10, borderRadius: 5, backgroundColor: '#4CAF50' },
+  settingLabel: { color: '#fff', fontSize: 15, fontWeight: '500', marginBottom: 2 },
+  settingDesc:  { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
 
-  optionLabel:         { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  optionLabelSelected: { color: '#2E7D32' },
-  optionExample:       { fontSize: 12, color: '#666', lineHeight: 18 },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginHorizontal: 16 },
 
-  poseRow: {
-    backgroundColor: '#fff', borderRadius: 10,
-    padding: 14, marginBottom: 8, elevation: 1,
-  },
-  poseName: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 3 },
-  poseDesc: { fontSize: 12, color: '#888' },
-
-  infoBox: {
-    margin: 16, marginTop: 20,
-    backgroundColor: '#E8F5E9', borderRadius: 12,
-    padding: 16, borderLeftWidth: 4, borderLeftColor: '#4CAF50',
-  },
-  infoTitle: { fontSize: 14, fontWeight: 'bold', color: '#2E7D32', marginBottom: 10 },
-  infoText:  { fontSize: 13, color: '#333', lineHeight: 22 },
+  infoRow:   { flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
+  infoLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
+  infoValue: { color: '#fff', fontSize: 14, fontWeight: '500' },
 });
 
 export default SettingsScreen;

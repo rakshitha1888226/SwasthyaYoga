@@ -1,126 +1,182 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, FlatList,
-  TouchableOpacity, StatusBar, SafeAreaView, Image,
+  View, Text, StyleSheet, TouchableOpacity,
+  SafeAreaView, StatusBar, ScrollView, FlatList,
 } from 'react-native';
-import { POSE_GROUPS, GROUP_LEVELS } from './poseGroups';
+
+// ── Pose groups data ────────────────────────────────────────────────────────────
+const POSE_GROUPS = [
+  {
+    id: 'beginner',
+    name: 'Beginner',
+    emoji: '🌱',
+    description: 'Simple poses for those just starting their yoga journey',
+    color: '#4CAF50',
+    poseCount: 6,
+    poses: ['mountain', 'tree', 'warrior1', 'child', 'cat', 'downdog'],
+  },
+  {
+    id: 'intermediate',
+    name: 'Intermediate',
+    emoji: '🔥',
+    description: 'Build strength and flexibility with these flowing poses',
+    color: '#FF9800',
+    poseCount: 6,
+    poses: ['warrior2', 'warrior3', 'triangle', 'chair', 'bridge', 'pigeon'],
+  },
+  {
+    id: 'advanced',
+    name: 'Advanced',
+    emoji: '⚡',
+    description: 'Challenge yourself with these demanding poses',
+    color: '#9C27B0',
+    poseCount: 4,
+    poses: ['crow', 'headstand', 'side_plank', 'wheel'],
+  },
+  {
+    id: 'morning',
+    name: 'Morning Flow',
+    emoji: '🌅',
+    description: 'Energising sequence to start your day right',
+    color: '#FF5722',
+    poseCount: 5,
+    poses: ['mountain', 'warrior1', 'downdog', 'cobra', 'child'],
+  },
+  {
+    id: 'relaxation',
+    name: 'Relaxation',
+    emoji: '😌',
+    description: 'Gentle poses to unwind and reduce stress',
+    color: '#2196F3',
+    poseCount: 5,
+    poses: ['child', 'pigeon', 'supine_twist', 'legs_up', 'savasana'],
+  },
+  {
+    id: 'core',
+    name: 'Core Strength',
+    emoji: '💪',
+    description: 'Target your core muscles with these powerful poses',
+    color: '#F44336',
+    poseCount: 5,
+    poses: ['plank', 'side_plank', 'boat', 'chair', 'warrior3'],
+  },
+];
 
 const PoseGroupScreen = ({ navigation }) => {
-  const renderGroup = ({ item }) => (
-    <TouchableOpacity
-      style={[styles.card, { borderLeftColor: item.color, borderLeftWidth: 4 }]}
-      activeOpacity={0.85}
-      onPress={() => navigation.navigate('PoseSequence', { group: item })}
-    >
-      <View style={styles.cardTop}>
-        <View style={[styles.emojiBox, { backgroundColor: item.bgColor }]}>
-          <Text style={styles.emoji}>{item.emoji}</Text>
-        </View>
-        <View style={styles.cardInfo}>
-          <Text style={styles.groupName}>{item.name}</Text>
-          <Text style={styles.subtitle}>{item.subtitle}</Text>
-          <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
-        </View>
-      </View>
-
-      <View style={styles.cardBottom}>
-        <View style={[
-          styles.levelBadge,
-          { backgroundColor: GROUP_LEVELS[item.level]?.bg || '#E8F5E9' }
-        ]}>
-          <Text style={[
-            styles.levelText,
-            { color: GROUP_LEVELS[item.level]?.text || '#2E7D32' }
-          ]}>
-            {item.level}
-          </Text>
-        </View>
-        <Text style={styles.duration}>⏱ {item.totalDuration}</Text>
-        <Text style={[styles.startArrow, { color: item.color }]}>Start →</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const handleGroupPress = (group) => {
+    navigation.navigate('PoseSequence', { group });
+  };
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
+      <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backTxt}>‹</Text>
         </TouchableOpacity>
-        <View>
-          <Text style={styles.headerTitle}>🧘 Yoga Practice</Text>
-          <Text style={styles.headerSub}>Choose your series</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Yoga Poses</Text>
+          <Text style={styles.headerSub}>Choose a group to practise</Text>
         </View>
+        <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.settingsBtn}>
+          <Text style={styles.settingsTxt}>⚙️</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Groups list */}
-      <FlatList
-        data={POSE_GROUPS}
-        keyExtractor={g => g.id}
-        contentContainerStyle={styles.list}
-        renderItem={renderGroup}
-        showsVerticalScrollIndicator={false}
-      />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {POSE_GROUPS.map((group) => (
+          <TouchableOpacity
+            key={group.id}
+            style={styles.groupCard}
+            onPress={() => handleGroupPress(group)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.iconBadge, { backgroundColor: group.color + '22' }]}>
+              <Text style={styles.groupEmoji}>{group.emoji}</Text>
+            </View>
+            <View style={styles.groupInfo}>
+              <Text style={styles.groupName}>{group.name}</Text>
+              <Text style={styles.groupDesc} numberOfLines={2}>{group.description}</Text>
+              <View style={styles.groupMeta}>
+                <View style={[styles.badge, { backgroundColor: group.color + '33' }]}>
+                  <Text style={[styles.badgeText, { color: group.color }]}>
+                    {group.poseCount} poses
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={[styles.arrow, { borderColor: group.color }]}>
+              <Text style={[styles.arrowText, { color: group.color }]}>›</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+
+        {/* Quick AI Pose Check */}
+        <TouchableOpacity
+          style={styles.aiCard}
+          onPress={() => navigation.navigate('PoseCamera', {})}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.aiEmoji}>🤖</Text>
+          <View style={styles.aiInfo}>
+            <Text style={styles.aiTitle}>Quick AI Pose Check</Text>
+            <Text style={styles.aiDesc}>Detect and classify any pose instantly</Text>
+          </View>
+          <Text style={styles.aiArrow}>›</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F0F4F0' },
+  root:    { flex: 1, backgroundColor: '#1a1a2e' },
 
   header: {
-    backgroundColor: '#1B5E20',
-    paddingTop: 16, paddingBottom: 20,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  backBtn: { padding: 4 },
-  backArrow: { color: '#fff', fontSize: 22 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  headerSub:   { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 },
+  backBtn:     { width: 40 },
+  backTxt:     { color: '#fff', fontSize: 28, lineHeight: 28 },
+  headerCenter:{ flex: 1, alignItems: 'center' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerSub:   { color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 },
+  settingsBtn: { width: 40, alignItems: 'flex-end' },
+  settingsTxt: { fontSize: 20 },
 
-  list: { padding: 16, gap: 14 },
+  content: { padding: 16, gap: 12 },
 
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    gap: 12,
+  groupCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 18, padding: 16, gap: 14,
   },
-  cardTop: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
-  emojiBox: {
-    width: 64, height: 64,
-    borderRadius: 16,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  emoji: { fontSize: 32 },
-  cardInfo: { flex: 1 },
-  groupName:   { fontSize: 17, fontWeight: 'bold', color: '#1A1A1A', marginBottom: 2 },
-  subtitle:    { fontSize: 12, color: '#888', marginBottom: 6 },
-  description: { fontSize: 13, color: '#555', lineHeight: 18 },
+  iconBadge: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  groupEmoji:{ fontSize: 26 },
+  groupInfo: { flex: 1, gap: 4 },
+  groupName: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  groupDesc: { color: 'rgba(255,255,255,0.5)', fontSize: 13, lineHeight: 18 },
+  groupMeta: { flexDirection: 'row', marginTop: 4 },
+  badge:     { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
+  badgeText: { fontSize: 12, fontWeight: '600' },
+  arrow:     { width: 32, height: 32, borderRadius: 10, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  arrowText: { fontSize: 20, lineHeight: 22 },
 
-  cardBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  aiCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(46,125,50,0.25)',
+    borderRadius: 18, padding: 16, gap: 14,
+    borderWidth: 1, borderColor: 'rgba(76,175,80,0.4)',
+    marginTop: 4,
   },
-  levelBadge: {
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 10,
-  },
-  levelText:  { fontSize: 11, fontWeight: 'bold' },
-  duration:   { fontSize: 12, color: '#888', flex: 1 },
-  startArrow: { fontSize: 14, fontWeight: 'bold' },
+  aiEmoji: { fontSize: 30 },
+  aiInfo:  { flex: 1 },
+  aiTitle: { color: '#4CAF50', fontSize: 16, fontWeight: '700' },
+  aiDesc:  { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 2 },
+  aiArrow: { color: '#4CAF50', fontSize: 24 },
 });
 
 export default PoseGroupScreen;

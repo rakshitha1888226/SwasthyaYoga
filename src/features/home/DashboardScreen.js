@@ -8,6 +8,7 @@ import auth from '@react-native-firebase/auth';
 import StreakBoard  from '../streak/StreakBoard';
 import PoseOfTheDay from '../streak/PoseOfTheDay';
 import { loadStreakData, markTodayDone } from '../streak/StreakService';
+import { requestNotificationPermission, scheduleDailyReminder, scheduleStreakReminder } from '../notifications/NotificationService';
 
 const { width } = Dimensions.get('window');
 
@@ -73,6 +74,20 @@ const DashboardScreen = ({ navigation }) => {
     loadStreakData().then(setStreakData);
   }, []);
 
+  /* request notification permission on first open */
+  useEffect(() => {
+    const setupNotifications = async () => {
+      try {
+        const granted = await requestNotificationPermission();
+        if (granted) {
+          await scheduleDailyReminder(6, 0);   // 6 AM daily
+          await scheduleStreakReminder();        // 8 PM streak reminder
+        }
+      } catch (e) {}
+    };
+    setupNotifications();
+  }, []);
+
   const handlePoseDone = async (poseId, poseName, score) => {
     const updated = await markTodayDone(poseId, poseName, score);
     if (updated) setStreakData(updated);
@@ -101,9 +116,17 @@ const DashboardScreen = ({ navigation }) => {
               <Text style={styles.greetTe}>{greeting.te}</Text>
               <Text style={styles.heroName}>{firstName} 🙏</Text>
             </View>
-            <TouchableOpacity style={styles.logoutPill} onPress={handleLogout}>
-              <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
+            <View style={styles.topBtns}>
+              <TouchableOpacity
+                style={styles.bellBtn}
+                onPress={() => navigation.navigate('NotificationSettings')}
+              >
+                <Text style={styles.bellIcon}>🔔</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.logoutPill} onPress={handleLogout}>
+                <Text style={styles.logoutText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Animated.View style={[styles.quoteCard, { opacity: fadeAnim }]}>
@@ -252,7 +275,10 @@ const styles = StyleSheet.create({
   greetEn:    { color: 'rgba(255,255,255,0.75)', fontSize: 13 },
   greetTe:    { color: 'rgba(255,255,255,0.6)',  fontSize: 12, marginBottom: 4 },
   heroName:   { color: '#fff', fontSize: 26, fontWeight: 'bold' },
-  logoutPill: { backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, marginTop: 8 },
+  topBtns:    { alignItems: 'flex-end', gap: 8, marginTop: 8 },
+  bellBtn:    { backgroundColor: 'rgba(255,255,255,0.15)', width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
+  bellIcon:   { fontSize: 18 },
+  logoutPill: { backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
   logoutText: { color: '#fff', fontSize: 12 },
 
   quoteCard:   { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, marginBottom: 14, borderLeftWidth: 3, borderLeftColor: '#A5D6A7' },

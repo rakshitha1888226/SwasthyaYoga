@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pose Detection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; width: 100vw; height: 100vh; font-family: sans-serif; }
+
+    #video {
+      position: absolute;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      opacity: 0;
+    }
+    #canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+
+    /* Top status */
+    #status {
+      position: absolute;
+      top: 14px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.72);
+      color: #FFC107;
+      font-size: 13px;
+      padding: 6px 20px;
+      border-radius: 20px;
+      z-index: 30;
+      white-space: nowrap;
+    }
+    #status.ready { color: #4CAF50; }
+    #status.error { color: #f44336; }
+    #status.listening { color: #2196F3; }
+
+    /* Voice status badge — shown when actively listening */
+    #voiceBadge {
+      position: absolute;
+      top: 52px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(33,150,243,0.9);
+      color: #fff;
+      font-size: 13px;
+      font-weight: bold;
+      padding: 5px 18px;
+      border-radius: 20px;
+      z-index: 30;
+      display: none;
+      animation: badgePulse 1.2s ease-in-out infinite;
+    }
+    #voiceBadge.show { display: block; }
+    @keyframes badgePulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* Bottom bar */
+    #bottomBar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 16px 20px 40px;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      z-index: 30;
+    }
+
+    /* Capture button */
+    #captureBtn {
+      width: 100%;
+      padding: 16px;
+      font-size: 17px;
+      font-weight: bold;
+      background: #2E7D32;
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+    }
+    #captureBtn:disabled { background: #444; color: #777; }
+    #captureBtn:active { transform: scale(0.98); }
+
+    /* Mic status row */
+    #micRow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: rgba(255,255,255,0.7);
+      font-size: 13px;
+    }
+    #micDot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #555;
+      transition: background 0.3s;
+    }
+    #micDot.on  { background: #2196F3; box-shadow: 0 0 6px #2196F3; }
+    #micDot.hearing { background: #4CAF50; box-shadow: 0 0 8px #4CAF50; }
+  </style>
+</head>
+<body>
+
+<div id="status">Starting camera...</div>
+<div id="voiceBadge">🎤 Listening — say "CAPTURE"</div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<div id="bottomBar">
+  <button id="captureBtn" onclick="capturePose()" disabled>📸 Tap to Capture</button>
+  <div id="micRow">
+    <div id="micDot"></div>
+    <span id="micLabel">Mic: starting...</span>
+  </div>
+</div>
+
+<script>
+const video      = document.getElementById('video');
+const canvas     = document.getElementById('canvas');
+const ctx        = canvas.getContext('2d');
+const statusEl   = document.getElementById('status');
+const captureBtn = document.getElementById('captureBtn');
+const voiceBadge = document.getElementById('voiceBadge');
+const micDot     = document.getElementById('micDot');
+const micLabel   = document.getElementById('micLabel');
+
+let lastPose     = null;
+let capturing    = false;
+let recognition  = null;
+let voiceActive  = false;
+let voiceSupported = false;
+let restartTimer = null;
+
+// ── Resize ─────────────────────────────────────────────────────────────────
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function setStatus(msg, type) {
+  statusEl.textContent = msg;
+  statusEl.className   = type || '';
+}
+
+function sendToRN(data) {
+  try { window.ReactNativeWebView.postMessage(JSON.stringify(data)); }
+  catch(e) { console.log('RN:', data.type); }
+}
+
+// ── MediaPipe — clear bright skeleton ──────────────────────────────────────
+const poseDetector = new Pose({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}`
+});
+poseDetector.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.6,
+  minTrackingConfidence: 0.6
+});
+
+poseDetector.onResults(results => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw camera frame
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+  if (results.poseLandmarks) {
+    // Draw thick bright connectors
+    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+      color: '#00E676',   // bright green
+      lineWidth: 4
+    });
+    // Draw bright yellow landmark dots
+    drawLandmarks(ctx, results.poseLandmarks, {
+      color: '#FFEB3B',
+      fillColor: '#FF6F00',
+      lineWidth: 2,
+      radius: 6
+    });
+
+    lastPose = results.poseLandmarks;
+    captureBtn.disabled = false;
+
+    if (!voiceActive) setStatus('✅ Pose ready — speak or tap!', 'ready');
+
+  } else {
+    lastPose = null;
+    captureBtn.disabled = true;
+    if (!voiceActive) setStatus('👤 Stand fully in frame...', '');
+  }
+});
+
+// ── Camera ─────────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    setStatus('Loading pose model...', '');
+    const camera = new Camera(video, {
+      onFrame: async () => { await poseDetector.send({ image: video }); },
+      width: 640, height: 480
+    });
+    await camera.start();
+    // Start voice immediately after camera loads
+    setTimeout(startVoice, 1500);
+  } catch(err) {
+    setStatus('Camera error: ' + err.message, 'error');
+    sendToRN({ type: 'error', message: err.message });
+  }
+}
+startCamera();
+
+// ── Capture ─────────────────────────────────────────────────────────────────
+function capturePose() {
+  if (!lastPose || capturing) return;
+
+  capturing = true;
+  captureBtn.disabled    = true;
+  captureBtn.textContent = '⏳ Capturing...';
+  setStatus('Capturing...', '');
+  voiceBadge.classList.remove('show');
+
+  setTimeout(() => {
+    try {
+      // Resize to 480x360 for API size limit
+      const small = document.createElement('canvas');
+      small.width  = 480;
+      small.height = 360;
+      const sc = small.getContext('2d');
+      sc.drawImage(canvas, 0, 0, 480, 360);
+      const imageBase64 = small.toDataURL('image/jpeg', 0.6);
+
+      const L = lastPose;
+      const lSh = L[11], rSh = L[12];
+      const lHip = L[23], rHip = L[24];
+      const shoulderTilt = Math.abs(lSh.y - rSh.y);
+      const hipTilt = Math.abs(lHip.y - rHip.y);
+      const spineOffset = Math.abs(L[0].x - (lHip.x + rHip.x) / 2);
+      const localScore = Math.round(
+        Math.max(0, Math.min(100, 100 - shoulderTilt*180 - hipTilt*140 - spineOffset*80))
+      );
+
+      sendToRN({
+        type: 'poseCapture',
+        image: imageBase64,
+        landmarks: L,
+        localScore,
+        metrics: {
+          shoulderTilt: shoulderTilt.toFixed(4),
+          hipTilt: hipTilt.toFixed(4),
+          spineOffset: spineOffset.toFixed(4)
+        },
+        keyPoints: {
+          nose: L[0],
+          leftShoulder: L[11],  rightShoulder: L[12],
+          leftElbow: L[13],     rightElbow: L[14],
+          leftWrist: L[15],     rightWrist: L[16],
+          leftHip: L[23],       rightHip: L[24],
+          leftKnee: L[25],      rightKnee: L[26],
+          leftAnkle: L[27],     rightAnkle: L[28]
+        }
+      });
+
+      setStatus('✅ Sent to AI!', 'ready');
+    } catch(e) {
+      setStatus('Error: ' + e.message, 'error');
+      sendToRN({ type: 'error', message: e.message });
+    }
+
+    setTimeout(() => {
+      capturing = false;
+      captureBtn.disabled    = false;
+      captureBtn.textContent = '📸 Tap to Capture';
+      if (lastPose) setStatus('✅ Pose ready — speak or tap!', 'ready');
+      // Restart always-on voice after capture
+      if (voiceSupported) startVoice();
+    }, 3000);
+  }, 150);
+}
+
+// ── ALWAYS-ON VOICE — starts automatically, restarts after each result ──────
+function setupVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    micLabel.textContent = 'Voice not supported on this device';
+    micDot.className = '';
+    return false;
+  }
+
+  recognition = new SR();
+  recognition.lang             = 'en-IN';   // Indian English accent
+  recognition.continuous       = false;      // one phrase at a time
+  recognition.interimResults   = false;
+  recognition.maxAlternatives  = 5;
+
+  recognition.onstart = () => {
+    voiceActive = true;
+    micDot.className = 'on';
+    micLabel.textContent = 'Mic ON — say "Capture"';
+    voiceBadge.classList.add('show');
+    setStatus('🎤 Say "Capture" now!', 'listening');
+  };
+
+  recognition.onresult = (event) => {
+    const keywords = [
+      'capture', 'cap', 'take', 'photo', 'click',
+      'shoot', 'go', 'snap', 'ok', 'yes',
+      'కాప్చర్', 'తీయి', 'చేయి', 'analyze'
+    ];
+
+    const results = event.results[0];
+    let heard = '';
+    for (let i = 0; i < results.length; i++) {
+      const word = results[i].transcript.toLowerCase().trim();
+      heard = word;
+      console.log('Heard:', word, 'confidence:', results[i].confidence.toFixed(2));
+
+      if (keywords.some(k => word.includes(k))) {
+        // ✅ HEARD KEYWORD — capture immediately
+        micDot.className = 'hearing';
+        micLabel.textContent = 'Heard "' + word + '" — capturing!';
+        voiceBadge.classList.remove('show');
+        voiceActive = false;
+
+        setTimeout(() => capturePose(), 200); // small delay feels natural
+        return;
+      }
+    }
+
+    // Not a keyword — restart listening automatically
+    console.log('Not a keyword, heard:', heard);
+    micDot.className = '';
+    voiceActive = false;
+    voiceBadge.classList.remove('show');
+    // Restart after 500ms
+    if (!capturing) restartTimer = setTimeout(startVoice, 500);
+  };
+
+  recognition.onnomatch = () => {
+    voiceActive = false;
+    if (!capturing) restartTimer = setTimeout(startVoice, 500);
+  };
+
+  recognition.onerror = (e) => {
+    voiceActive = false;
+    voiceBadge.classList.remove('show');
+    console.log('Voice error:', e.error);
+
+    if (e.error === 'not-allowed') {
+      micDot.className = '';
+      micLabel.textContent = 'Mic blocked — use tap button';
+      voiceSupported = false;
+      return;
+    }
+    if (e.error === 'network') {
+      micLabel.textContent = 'Voice needs internet';
+    }
+    // For all other errors (aborted, no-speech etc) — restart
+    if (!capturing) restartTimer = setTimeout(startVoice, 800);
+  };
+
+  recognition.onend = () => {
+    voiceActive = false;
+    voiceBadge.classList.remove('show');
+    micDot.className = '';
+    micLabel.textContent = 'Mic: restarting...';
+    // Auto-restart unless we're capturing
+    if (!capturing && voiceSupported) {
+      restartTimer = setTimeout(startVoice, 600);
+    }
+  };
+
+  return true;
+}
+
+function startVoice() {
+  if (capturing || !voiceSupported) return;
+  clearTimeout(restartTimer);
+  try {
+    recognition.start();
+  } catch(e) {
+    // Already started — ignore
+    console.log('Voice start err (ignored):', e.message);
+    restartTimer = setTimeout(startVoice, 1000);
+  }
+}
+
+// Init voice
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  voiceSupported = true;
+  setupVoice();
+} else {
+  micLabel.textContent = 'Voice unavailable — use tap button';
+}
+
+// Listen from React Native too
+function handleRNMessage(raw) {
+  try {
+    const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (msg.command === 'capture') capturePose();
+  } catch(e) {}
+}
+document.addEventListener('message', e => handleRNMessage(e.data));
+window.addEventListener('message',   e => handleRNMessage(e.data));
+</script>
+</body>
+</html>

@@ -8,12 +8,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ASYNC_KEY = 'swasthya_streak_v1';
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+const todayStr = () => {
+  const d = new Date();
+  // Use local date — NOT UTC (fixes IST timezone lag issue)
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 const yesterdayStr = () => {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  // Use local date — NOT UTC (fixes IST timezone lag issue)
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 export function getTodayString() { return todayStr(); }
@@ -25,7 +36,11 @@ export function getWeekDates() {
   for (let i = 0; i < 7; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() - day + i);
-    week.push(d.toISOString().split('T')[0]);
+    // Use local date — NOT UTC (fixes IST timezone lag)
+    const yyyy = d.getFullYear();
+    const mm   = String(d.getMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getDate()).padStart(2, '0');
+    week.push(`${yyyy}-${mm}-${dd}`);
   }
   return week;
 }

@@ -1,140 +1,165 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList,
-  TouchableOpacity, StatusBar, SafeAreaView, Image,
+  View, Text, StyleSheet, TouchableOpacity,
+  SafeAreaView, StatusBar, ScrollView,
 } from 'react-native';
 
-const SmartImage = ({ uri, emoji, style }) => {
-  const [failed, setFailed] = React.useState(false);
-  if (failed || !uri) {
-    return (
-      <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F0F0' }]}>
-        <Text style={{ fontSize: 28 }}>{emoji || '🧘'}</Text>
-      </View>
-    );
-  }
-  return <Image source={{ uri }} style={style} onError={() => setFailed(true)} resizeMode="cover" />;
+const POSE_DISPLAY = {
+  mountain:     { en: 'Mountain',      emoji: '⛰️' },
+  tree:         { en: 'Tree',          emoji: '🌳' },
+  warrior1:     { en: 'Warrior I',     emoji: '⚔️' },
+  warrior2:     { en: 'Warrior II',    emoji: '⚔️' },
+  warrior3:     { en: 'Warrior III',   emoji: '⚔️' },
+  child:        { en: "Child's Pose",  emoji: '🧸' },
+  cat:          { en: 'Cat',           emoji: '🐱' },
+  downdog:      { en: 'Down Dog',      emoji: '🐕' },
+  triangle:     { en: 'Triangle',      emoji: '🔺' },
+  chair:        { en: 'Chair',         emoji: '🪑' },
+  bridge:       { en: 'Bridge',        emoji: '🌉' },
+  pigeon:       { en: 'Pigeon',        emoji: '🕊️' },
+  crow:         { en: 'Crow',          emoji: '🐦' },
+  headstand:    { en: 'Headstand',     emoji: '🙃' },
+  side_plank:   { en: 'Side Plank',    emoji: '💪' },
+  wheel:        { en: 'Wheel',         emoji: '🎡' },
+  cobra:        { en: 'Cobra',         emoji: '🐍' },
+  plank:        { en: 'Plank',         emoji: '🏋️' },
+  boat:         { en: 'Boat',          emoji: '⛵' },
+  supine_twist: { en: 'Supine Twist',  emoji: '🌀' },
+  legs_up:      { en: 'Legs Up Wall',  emoji: '🦵' },
+  savasana:     { en: 'Savasana',      emoji: '😴' },
 };
 
 const PoseSequenceScreen = ({ navigation, route }) => {
   const { group } = route.params || {};
-  if (!group) return null;
+  const poses     = group?.poses || [];
+  const [current, setCurrent] = useState(0);
 
-  const startFromPose = (index) => {
+  const pose     = poses[current];
+  const display  = POSE_DISPLAY[pose] || { en: pose, emoji: '🧘' };
+  const isLast   = current === poses.length - 1;
+
+  const handleStart = () => {
     navigation.navigate('PoseCamera', {
+      poseOfDay:    { id: pose, name: display.en, emoji: display.emoji },
       group,
-      poses: group.poses,
-      currentIndex: index,
+      poses,
+      currentIndex: current,
     });
   };
 
-  const startAll = () => startFromPose(0);
+  const handleNext = () => {
+    if (!isLast) setCurrent(c => c + 1);
+    else navigation.navigate('Dashboard');
+  };
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={group.color} />
+      <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
 
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: group.color }]}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backTxt}>‹</Text>
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>{group.emoji} {group.name}</Text>
-          <Text style={styles.headerSub}>{group.subtitle}</Text>
-        </View>
-        <TouchableOpacity style={styles.startAllBtn} onPress={startAll}>
-          <Text style={styles.startAllTxt}>Start All →</Text>
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{group?.name || 'Sequence'}</Text>
+        <Text style={styles.progress}>{current + 1}/{poses.length}</Text>
       </View>
 
-      {/* Description */}
-      <View style={styles.descBox}>
-        <Text style={styles.descText}>{group.description}</Text>
-        <View style={styles.descMeta}>
-          <Text style={styles.descMetaItem}>⏱ {group.totalDuration}</Text>
-          <Text style={styles.descMetaItem}>📊 {group.level}</Text>
-          <Text style={styles.descMetaItem}>🧘 {group.poses?.length} poses</Text>
-        </View>
+      {/* Progress bar */}
+      <View style={styles.progressBarBg}>
+        <View style={[styles.progressBarFill, { width: `${((current + 1) / poses.length) * 100}%` }]} />
       </View>
 
-      {/* Poses list */}
-      <FlatList
-        data={group.poses || []}
-        keyExtractor={p => p.id}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.poseCard}
-            onPress={() => startFromPose(index)}
-            activeOpacity={0.85}
-          >
-            <SmartImage uri={item.image} emoji={item.emoji} style={styles.poseImg} />
-            <View style={styles.poseInfo}>
-              <View style={styles.poseTopRow}>
-                <View style={[styles.stepBadge, { backgroundColor: group.color }]}>
-                  <Text style={styles.stepBadgeTxt}>{item.step || index + 1}</Text>
-                </View>
-                <Text style={styles.poseName}>{item.name}</Text>
-                <Text style={styles.poseDuration}>{item.duration}</Text>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
+        {/* Pose display */}
+        <View style={styles.poseCard}>
+          <Text style={styles.poseEmoji}>{display.emoji}</Text>
+          <Text style={styles.poseName}>{display.en}</Text>
+          <Text style={styles.poseId}>{pose}</Text>
+        </View>
+
+        {/* Steps list */}
+        <View style={styles.stepsCard}>
+          <Text style={styles.stepsTitle}>Upcoming poses</Text>
+          {poses.map((p, i) => {
+            const d = POSE_DISPLAY[p] || { en: p, emoji: '🧘' };
+            const done    = i < current;
+            const active  = i === current;
+            return (
+              <View key={p} style={[styles.stepRow, active && styles.stepRowActive]}>
+                <Text style={styles.stepEmoji}>{done ? '✅' : active ? d.emoji : '○'}</Text>
+                <Text style={[styles.stepName,
+                  done   && styles.stepDone,
+                  active && styles.stepActive,
+                ]}>{d.en}</Text>
+                {active && <View style={styles.activeDot} />}
               </View>
-              <Text style={styles.poseInstruction} numberOfLines={2}>{item.instruction}</Text>
-              {item.keyPoints && (
-                <Text style={styles.poseKeyPoints} numberOfLines={1}>
-                  🎯 {item.keyPoints}
-                </Text>
-              )}
-            </View>
-            <Text style={[styles.goArrow, { color: group.color }]}>›</Text>
-          </TouchableOpacity>
-        )}
-      />
+            );
+          })}
+        </View>
+
+        {/* Action buttons */}
+        <TouchableOpacity style={styles.startBtn} onPress={handleStart}>
+          <Text style={styles.startBtnText}>📸 Practice This Pose</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.skipBtn} onPress={handleNext}>
+          <Text style={styles.skipBtnText}>{isLast ? '✅ Finish Session' : 'Skip → Next Pose'}</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F0F4F0' },
+  root: { flex: 1, backgroundColor: '#1a1a2e' },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingTop: 16, paddingBottom: 20, paddingHorizontal: 16, gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
   },
-  backBtn:    { padding: 4 },
-  backArrow:  { color: '#fff', fontSize: 22 },
-  headerTitle:{ color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  headerSub:  { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
-  startAllBtn:{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
-  startAllTxt:{ color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  backBtn:     { width: 40 },
+  backTxt:     { color: '#fff', fontSize: 28, lineHeight: 28 },
+  headerTitle: { flex: 1, color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  progress:    { width: 40, color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'right' },
 
-  descBox: {
-    backgroundColor: '#fff', margin: 12, borderRadius: 14,
-    padding: 14, elevation: 2, gap: 10,
-  },
-  descText: { fontSize: 14, color: '#444', lineHeight: 20 },
-  descMeta: { flexDirection: 'row', gap: 16 },
-  descMetaItem: { fontSize: 12, color: '#888' },
+  progressBarBg: { height: 4, backgroundColor: 'rgba(255,255,255,0.1)' },
+  progressBarFill: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 2 },
 
-  list: { padding: 12, gap: 10 },
+  content: { padding: 20, gap: 16 },
 
   poseCard: {
-    backgroundColor: '#fff', borderRadius: 16,
-    flexDirection: 'row', alignItems: 'center',
-    overflow: 'hidden', elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08, shadowRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 24, padding: 40,
+    alignItems: 'center', gap: 10,
   },
-  poseImg:    { width: 90, height: 90 },
-  poseInfo:   { flex: 1, padding: 12, gap: 5 },
-  poseTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stepBadge:  { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  stepBadgeTxt: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  poseName:     { flex: 1, fontSize: 14, fontWeight: 'bold', color: '#222' },
-  poseDuration: { fontSize: 11, color: '#888' },
-  poseInstruction: { fontSize: 12, color: '#555', lineHeight: 17 },
-  poseKeyPoints:   { fontSize: 11, color: '#888' },
-  goArrow: { fontSize: 28, paddingRight: 12 },
+  poseEmoji: { fontSize: 72 },
+  poseName:  { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  poseId:    { color: 'rgba(255,255,255,0.3)', fontSize: 13 },
+
+  stepsCard: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 18, padding: 18, gap: 10,
+  },
+  stepsTitle: { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600',
+                textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  stepRow:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
+  stepRowActive: { backgroundColor: 'rgba(76,175,80,0.12)', borderRadius: 10, padding: 8, marginHorizontal: -8 },
+  stepEmoji: { fontSize: 18, width: 24, textAlign: 'center' },
+  stepName:  { flex: 1, color: 'rgba(255,255,255,0.5)', fontSize: 14 },
+  stepDone:  { color: 'rgba(255,255,255,0.25)', textDecorationLine: 'line-through' },
+  stepActive:{ color: '#fff', fontWeight: '700' },
+  activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CAF50' },
+
+  startBtn: {
+    backgroundColor: '#2E7D32', borderRadius: 28,
+    padding: 18, alignItems: 'center',
+  },
+  startBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  skipBtn:      { alignItems: 'center', paddingVertical: 10 },
+  skipBtnText:  { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
 });
 
 export default PoseSequenceScreen;

@@ -1,7 +1,7 @@
 // ── SwasthyaYoga — AI Health Service (Gemini 2.5 Flash — FREE) ───────────────
 // Get FREE key from: https://aistudio.google.com/app/apikey
 
-const GEMINI_API_KEY = 'AIzaSyB9ZrY74Ovtvr-64wjgmyJuYDgwI47o8Ok';
+const GEMINI_API_KEY = 'AIzaSyAyUaxbbboB58Ycnzd6oguceSBQdSwLrtw';
 
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
