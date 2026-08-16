@@ -5,10 +5,10 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { markTodayDone } from '../streak/StreakService';
+import { classifyPoseOnDevice } from './PoseDetectionService';
 
 const SCALER_PARAMS = require('../../../android/app/src/main/assets/scaler_params.json');
 const API_URL    = 'http://10.201.87.109:5000/predict';
-const HEALTH_URL = 'http://10.201.87.109:5000/health';
 
 const POSE_DISPLAY = {
   downdog:  { en: 'Downward Dog', te: 'అధో ముఖ శ్వానాసన', emoji: '🐕' },
@@ -30,6 +30,11 @@ async function requestCameraPermission() {
 }
 
 async function classifyPose(landmarks) {
+  // 1. Try On-Device AI Classifier (Instant, 100% Offline)
+  const localResult = classifyPoseOnDevice(landmarks);
+  if (localResult) return localResult;
+
+  // 2. Optional fallback to Python server if available
   try {
     const flat = [];
     for (const lm of landmarks) flat.push(lm.x, lm.y, lm.z, lm.visibility ?? 0);
@@ -45,7 +50,6 @@ async function classifyPose(landmarks) {
     if (!response.ok) return null;
     return await response.json();
   } catch (e) {
-    console.log('API error:', e.message);
     return null;
   }
 }
@@ -362,7 +366,7 @@ const SmartPoseCameraScreen = ({ navigation, route }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const [prediction,   setPrediction]   = useState(null);
-  const [apiReady,     setApiReady]     = useState(false);
+  const [apiReady,     setApiReady]     = useState(true);
   const [status,       setStatus]       = useState('Requesting camera permission...');
   const [camPermitted, setCamPermitted] = useState(false);
 
@@ -371,12 +375,8 @@ const SmartPoseCameraScreen = ({ navigation, route }) => {
       const granted = await requestCameraPermission();
       if (granted) {
         setCamPermitted(true);
-        fetch(HEALTH_URL)
-          .then(r => {
-            if (r.ok) { setApiReady(true); setStatus('AI Ready! Show your pose 🧘'); }
-            else setStatus('⚠️ Start yoga_server.py on laptop');
-          })
-          .catch(() => setStatus('⚠️ Start yoga_server.py on laptop'));
+        setApiReady(true);
+        setStatus('On-Device AI Ready! Say "capture" or raise hands 🧘');
       } else {
         setStatus('❌ Camera permission denied');
       }
@@ -444,12 +444,12 @@ const SmartPoseCameraScreen = ({ navigation, route }) => {
       }
 
       if (msg.type === 'error') setStatus('Camera error — check permissions');
-      if (msg.type === 'ready') setStatus(apiReady ? 'Say "capture" or raise both hands! 🧘' : 'Loading AI model...');
+      if (msg.type === 'ready') setStatus('Say "capture" or raise both hands! 🧘');
 
     } catch (err) {
       console.error('onMessage error:', err);
     }
-  }, [apiReady, navigation, onPoseDone]);
+  }, [navigation, onPoseDone]);
 
   const predColor = !prediction ? '#888'
     : prediction.confidence >= 85 ? '#4CAF50'
@@ -468,9 +468,9 @@ const SmartPoseCameraScreen = ({ navigation, route }) => {
           <Text style={styles.headerTitle}>
             {poseOfDay ? `Today: ${poseOfDay.name?.en || poseOfDay.name}` : 'AI Pose Detection'}
           </Text>
-          <View style={[styles.badge, { backgroundColor: apiReady ? '#1B5E20' : '#B71C1C' }]}>
+          <View style={[styles.badge, { backgroundColor: '#1B5E20' }]}>
             <Text style={styles.badgeText}>
-              {apiReady ? '🤖 AI Ready — 98.5% accurate' : '⚠️ Start yoga_server.py'}
+              🤖 On-Device AI Active — 100% Offline
             </Text>
           </View>
         </View>

@@ -218,31 +218,57 @@ const WeightCheckScreen = ({ navigation }) => {
 
   const s = STR[lang || 'en'];
 
-  // height in cm — converts from total inches if needed
-  const heightCm = () => {
-    const v = parseFloat(height);
-    return heightUnit === 'in' ? +(v * 2.54).toFixed(1) : v;
+  // Smart height parsing — supports cm, total inches (67), and feet.inches (5.7 or 5'7)
+  const parseHeightInCm = () => {
+    const raw = (height || '').toString().trim();
+    if (!raw) return NaN;
+    const val = parseFloat(raw);
+    if (isNaN(val)) return NaN;
+
+    if (heightUnit === 'cm') {
+      return val;
+    }
+
+    // Inches / Feet mode
+    if (raw.includes('.') || raw.includes("'")) {
+      const clean = raw.replace("'", '.').replace('"', '');
+      const parts = clean.split('.');
+      const feet = parseInt(parts[0], 10) || 0;
+      let inches = 0;
+      if (parts[1]) {
+        inches = parseFloat(parts[1]) || 0;
+      }
+      const totalInches = (feet * 12) + inches;
+      return +(totalInches * 2.54).toFixed(1);
+    }
+
+    if (val < 10) {
+      return +((val * 12) * 2.54).toFixed(1);
+    }
+
+    return +(val * 2.54).toFixed(1);
   };
+
+  const heightCm = () => parseHeightInCm();
 
   // live hint for height field
   const heightHint = () => {
-    const v = parseFloat(height);
-    if (isNaN(v)) return null;
+    const hcm = parseHeightInCm();
+    if (isNaN(hcm) || !(height || '').toString().trim()) return null;
+
+    const totalInches = hcm / 2.54;
+    const ft = Math.floor(totalInches / 12);
+    const inc = Math.round(totalInches % 12);
+
     if (heightUnit === 'in') {
-      const cm = (v * 2.54).toFixed(1);
-      const ft = Math.floor(v / 12);
-      const inc = Math.round(v % 12);
-      return `= ${cm} cm  (${ft}'${inc}")`;
+      return `= ${hcm.toFixed(1)} cm  (${ft}'${inc}")`;
     }
-    const totalIn = v / 2.54;
-    const ft = Math.floor(totalIn / 12);
-    const inc = Math.round(totalIn % 12);
-    return `= ${ft}'${inc}"  (${totalIn.toFixed(1)} in)`;
+    return `= ${ft}'${inc}"  (${totalInches.toFixed(1)} in)`;
   };
 
   const validate = () => {
     const a = parseFloat(age), w = parseFloat(weight);
-    const hcm = heightCm();
+    const hcm = parseHeightInCm();
     if (isNaN(a) || isNaN(hcm) || isNaN(w)) return s.errFill;
     if (a < 5    || a > 80)    return s.errAge;
     if (hcm < 80 || hcm > 220) return s.errHeight;
@@ -254,7 +280,7 @@ const WeightCheckScreen = ({ navigation }) => {
     const err = validate();
     if (err) { setError(err); return; }
     setError('');
-    setResult(calcBMI(parseFloat(age), heightCm(), parseFloat(weight)));
+    setResult(calcBMI(parseFloat(age), parseHeightInCm(), parseFloat(weight)));
   };
 
   const handleReset = () => {
@@ -381,12 +407,12 @@ const WeightCheckScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 ))}
                 <Text style={st.unitToggleHint}>
-                  {heightUnit === 'cm' ? 'centimetres' : "total inches  (5'7\" = 67 in)"}
+                  {heightUnit === 'cm' ? 'centimetres' : "feet.inches (5.7) or total inches (67)"}
                 </Text>
               </View>
               <View style={st.inputRow}>
                 <TextInput style={st.input}
-                  placeholder={heightUnit === 'cm' ? 'e.g.  165' : 'e.g.  67'}
+                  placeholder={heightUnit === 'cm' ? 'e.g.  165' : 'e.g.  5.7  or  67'}
                   placeholderTextColor="#bbb"
                   keyboardType="decimal-pad" value={height} onChangeText={setHeight} />
                 <View style={st.unit}><Text style={st.unitTxt}>{heightUnit}</Text></View>

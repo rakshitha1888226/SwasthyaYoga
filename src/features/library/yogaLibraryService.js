@@ -1,9 +1,16 @@
 // ── Yoga Library AI Service ───────────────────────────────────────────────────
-// Uses same Gemini key as healthAIService
+// Uses Gemini 2.0 / 1.5 Flash API
 
-const GEMINI_API_KEY = 'AIzaSyAyUaxbbboB58Ycnzd6oguceSBQdSwLrtw'; // same key as healthAIService.js
+export let GEMINI_API_KEY = 'AIzaSyCH3of-xR13cLC_TFEzKKuUEHlWR0cyCeI';
 
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+export function setGeminiApiKey(key) {
+  if (key) GEMINI_API_KEY = key.trim();
+}
+
+const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+
+const getGeminiUrl = (model, key) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
 // ── Fetch Wikipedia image by pose name ────────────────────────────────────────
 export async function fetchWikipediaImage(poseName) {
@@ -73,58 +80,63 @@ Rules:
 
 // ── Main fetch function ───────────────────────────────────────────────────────
 export async function fetchYogaCategory(categoryName, categoryType, retryCount = 0) {
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_KEY_HERE') {
-    return { success: false, error: 'Gemini API key missing in yogaLibraryService.js' };
-  }
-
-  try {
-    const response = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildPrompt(categoryName, categoryType) }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 16384 },
-      }),
-    });
-
-    // 503 = Gemini busy — retry up to 3 times
-    if (response.status === 503 && retryCount < 3) {
-      await new Promise(res => setTimeout(res, (retryCount + 1) * 2000));
-      return fetchYogaCategory(categoryName, categoryType, retryCount + 1);
-    }
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Gemini ${response.status}: ${err}`);
-    }
-
-    const apiData = await response.json();
-    let rawText = apiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    // Strip markdown
-    rawText = rawText.replace(/^```json\s*/im, '').replace(/^```\s*/im, '').replace(/\s*```\s*$/im, '').trim();
-    const firstBrace = rawText.indexOf('{');
-    if (firstBrace > 0) rawText = rawText.substring(firstBrace);
-
-    let parsed;
+  for (const model of MODELS) {
     try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
-      else throw new Error('Could not parse response. Please try again.');
+      const url = getGeminiUrl(model, GEMINI_API_KEY);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: buildPrompt(categoryName, categoryType) }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 16384 },
+        }),
+      });
+
+      if (response.status === 503 && retryCount < 2) {
+        await new Promise((res) => setTimeout(res, 1500));
+        return fetchYogaCategory(categoryName, categoryType, retryCount + 1);
+      }
+
+      if (!response.ok) {
+        console.log(`Gemini library model ${model} status: HTTP ${response.status}`);
+        continue;
+      }
+
+      const apiData = await response.json();
+      let rawText = apiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      rawText = rawText
+        .replace(/^```json\s*/im, '')
+        .replace(/^```\s*/im, '')
+        .replace(/\s*```\s*$/im, '')
+        .trim();
+      const firstBrace = rawText.indexOf('{');
+      if (firstBrace > 0) rawText = rawText.substring(firstBrace);
+
+      let parsed;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        const match = rawText.match(/\{[\s\S]*\}/);
+        if (match) parsed = JSON.parse(match[0]);
+        else continue;
+      }
+
+      const asanasWithImages = await Promise.all(
+        (parsed.asanas || []).map(async (asana) => {
+          const image = await fetchWikipediaImage(asana.sanskritName);
+          return { ...asana, image: image || null };
+        })
+      );
+
+      return { success: true, data: { ...parsed, asanas: asanasWithImages } };
+    } catch (err) {
+      console.log(`Gemini model ${model} category offline:`, err.message);
     }
-
-    // Fetch Wikipedia images for each asana in parallel
-    const asanasWithImages = await Promise.all(
-      (parsed.asanas || []).map(async (asana) => {
-        const image = await fetchWikipediaImage(asana.sanskritName);
-        return { ...asana, image: image || null };
-      })
-    );
-
-    return { success: true, data: { ...parsed, asanas: asanasWithImages } };
-  } catch (err) {
-    console.error('fetchYogaCategory error:', err);
-    return { success: false, error: err.message };
   }
+
+  return {
+    success: false,
+    error: 'Gemini API key is invalid or expired. Please update your API key.',
+  };
 }

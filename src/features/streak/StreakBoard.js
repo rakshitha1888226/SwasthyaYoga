@@ -5,7 +5,7 @@ import {
 import { getWeekDates } from './StreakService';
 
 const { width } = Dimensions.get('window');
-const DAY_LABELS = ['S', 'S', 'M', 'T', 'W', 'T', 'F'];
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const GEM_MILESTONES = [
   { days: 7,   emoji: '🥉', label: '7 days',   color: '#CD7F32' },
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between' },
   dayCell: { alignItems: 'center', gap: 6, width: (width - 32 - 40 - 28) / 7 },
-  dayLabel:      { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' },
+  dayLabel:      { color: 'rgba(255,255,255,0.5)', fontSize: 10.5, fontWeight: '600' },
   dayLabelToday: { color: '#FF6D00', fontWeight: 'bold' },
   dayFire:  { fontSize: 20 },
   dayDot: {

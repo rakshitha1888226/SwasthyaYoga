@@ -6,6 +6,7 @@
     "android": "react-native run-android",
     "start": "react-native start"
   },
+
   "dependencies": {
     "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -31,6 +32,7 @@
     "react-native-vision-camera": "^2.16.8",
     "react-native-webview": "^12.1.0"
   },
+  
   "devDependencies": {
     "@react-native/metro-config": "^0.84.1",
     "@types/react": "^19.2.14",
