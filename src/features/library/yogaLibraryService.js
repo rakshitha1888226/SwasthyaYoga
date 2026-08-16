@@ -1,7 +1,7 @@
 // ── Yoga Library AI Service ───────────────────────────────────────────────────
 // Uses Gemini 2.0 / 1.5 Flash API
 
-export let GEMINI_API_KEY = 'AIzaSyCH3of-xR13cLC_TFEzKKuUEHlWR0cyCeI';
+export let GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 export function setGeminiApiKey(key) {
   if (key) GEMINI_API_KEY = key.trim();

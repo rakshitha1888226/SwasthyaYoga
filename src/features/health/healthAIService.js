@@ -3,7 +3,7 @@
 
 import { CONDITIONS } from './Healthdata';
 
-export let GEMINI_API_KEY = 'AIzaSyCH3of-xR13cLC_TFEzKKuUEHlWR0cyCeI';
+export let GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 export function setGeminiApiKey(key) {
   if (key) GEMINI_API_KEY = key.trim();
